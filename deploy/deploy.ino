@@ -5,7 +5,6 @@ byte RCright = 10; //remote control right joystick
 int PWM_L;
 int PWM_R;
 
-
 void setup() {
   pinMode(RCleft, INPUT);
   pinMode(RCright, INPUT); 
@@ -14,20 +13,24 @@ void setup() {
 }
 
 void loop() {
-  //PORTC = B10100000; //direction (***confirm is forward or reverse***)
-  PWM_L = pulseIn(RCleft, HIGH);  //take input signals, convert to PWM signals
+  //Take input signal, convert to PWM signal//
+  PWM_L = pulseIn(RCleft, HIGH);
+  Serial.println(PWM_L);
+  delay(2000);
   PWM_L = map(PWM_L, 1915, 1073, 0, 255);
-  constrain(ENB, 0, 255);
-  
-  while(PWM_L >= 120 && PWM_L <= 135)  //while LEFT joystick is centered (neither fwd/reverse)
+  Serial.println(PWM_L);
+  delay(2000);
+
+/*
+  while(PWM_L >= 115 && PWM_L <= 140)  //while LEFT joystick is centered (neither fwd/reverse)
   {
     analogWrite(ENB, 0);
     break;
   }
   
-  while(PWM_L < 120) //while LEFT joystick is in reverse
+  while(PWM_L < 115) //while LEFT joystick is in reverse, set pin 31 & 33 HIGH
   {
-    PORTC = B01010000;
+    PORTC = B01010000; 
     if(PWM_L <= 70)
     {
       analogWrite(ENB, 0);	
@@ -35,7 +38,7 @@ void loop() {
     }
     else
     {
-      //PORTC = B01010000; //pin 31 & 33 HIGH (REVERSE)
+      PWM_L = map(PWM_L,
       analogWrite(ENB, PWM_L);
       break;
     }
@@ -47,5 +50,5 @@ void loop() {
     analogWrite(ENB, PWM_L);
     break;
   }
-  Serial.println(PWM_L);
+*/
 }
