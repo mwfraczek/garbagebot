@@ -20,6 +20,4 @@ Documentation for an Autonmous Beach Cleaning Robot
 
 *Workflow/Tasks*
 -Complete fine tuning RC code on remote testbed robot
--Develop 2WD variant code 
--Look into LiPo 2S-4S battery for tx
- 
+-Develop 2WD variant code  
