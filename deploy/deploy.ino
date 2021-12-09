@@ -13,42 +13,23 @@ void setup() {
 }
 
 void loop() {
-  //Take input signal, convert to PWM signal//
-  PWM_L = pulseIn(RCleft, HIGH);
+  PWM_L = pulseIn(RCleft, HIGH); //take RC signal 
   Serial.println(PWM_L);
-  delay(2000);
-  PWM_L = map(PWM_L, 1915, 1073, 0, 255);
-  Serial.println(PWM_L);
-  delay(2000);
 
-/*
-  while(PWM_L >= 115 && PWM_L <= 140)  //while LEFT joystick is centered (neither fwd/reverse)
+  if(PWM_L >= 1430 && PWM_L <= 1540)  // LEFT joystick is centered (neither fwd/reverse)
   {
     analogWrite(ENB, 0);
-    break;
   }
-  
-  while(PWM_L < 115) //while LEFT joystick is in reverse, set pin 31 & 33 HIGH
+  else if(PWM_L > 1540) //LEFT joystick is in reverse, set pins 31 & 33 HIGH, map PWM values, send signal
   {
-    PORTC = B01010000; 
-    if(PWM_L <= 70)
-    {
-      analogWrite(ENB, 0);	
-      break;
-    }
-    else
-    {
-      PWM_L = map(PWM_L,
-      analogWrite(ENB, PWM_L);
-      break;
-    }
+    PORTC = B01010000;
+    PWM_L = map(PWM_L, 1539, 1915, 55, 255);
+    analogWrite(ENB, PWM_L);
   }
-  
-  while(PWM_L > 130)
+  else if(PWM_L < 1430) //LEFT joystick is forward, set pins 30 & 32 HIGH, map PWM values, send signal 
   {
     PORTC = B10100000;
+    PWM_L = map(PWM_L, 1431, 1080, 55, 255);
     analogWrite(ENB, PWM_L);
-    break;
   }
-*/
 }
