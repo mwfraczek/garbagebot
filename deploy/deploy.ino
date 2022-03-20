@@ -40,7 +40,9 @@ float compass = 0; // current compass
 float avgcomp = 0; // averagecompass value
 
 // Pathing Variables
+int pilotsignal = 2000; // variable for pilotsignal transmitter
 bool greenlight = false; // is bot in autonomous mode?
+bool panicking = false; // are we emergency stopped?
 double speed_y = 0; // y speed
 int speedmax = 4; // speed limiter
 double pos_y = 0; // y position variables
@@ -52,9 +54,18 @@ int compassconstraint = 2; // min and max deviation of compass for autodriveForw
 bool driveline = false; // are we driving forward?
 bool turning = false; // are we turning?
 bool turnComplete = false; // is the turn complete?
+bool calibrated = false; // are we calibrated?
+
+// Ultrasound Variables
+float ultraDistanceL = 0; // left ultrasound, raw distance
+float ultraAvgL = 0; // left ultrasound, averaged for noise
+float ultraDistanceR = 0; // right ultrasound, raw distance
+float ultraAvgR = 0; // right ultrasound, averaged for noise
+int ultraObstacle = 100; // check for obstacles within this distance
 
 // Scoop Variables
 bool scoopdeployed = false;
+float scoopheight = 0;
 
 
 void setup() {
@@ -78,6 +89,7 @@ void setup() {
 
   // Disable autonomous mode
   greenlight = false;
+  panicking = false;
 
   // Initialize the IMU
   bool initialized = false;
@@ -148,12 +160,20 @@ void setup() {
   driveline = false;
   turning = false;
   turnComplete = false;
+  calibrated = false;
 }
 
 void loop() {
   // RC input to toggle greenlight via pilotbutton
-  // placeholder
-  delay(1);
+  pilotsignal = pulseIn(pilotbutton, HIGH);
+  if (pilotsignal > 1900 || pilotsignal == 0 || panicking == true)
+  {
+    greenlight = false;
+  }
+  if (pilotsignal < 1900 && pilotsignal != 0 && panicking == false)
+  {
+    greenlight = true;
+  }
   
   // When not in autonomous mode
   if (greenlight = false)
@@ -200,6 +220,10 @@ void loop() {
   // When in autonomous mode
   if (greenlight = true)
   {
+    if (calibrated = false)
+    {
+      calibrate();
+    }
     calcAccel();
     calcPos();
     ultraSound();
@@ -212,6 +236,7 @@ void loop() {
 void panic()
 {
   greenlight = false;
+  panicking = true;
 }
 
 // IMU Funtions
@@ -418,10 +443,13 @@ void calcPos()
   // placeholder for speed and position calculation
   delay(1);
 
-  // compass calibration at start and after turns
-  if (driveline == false && turning == false)
-  {
-    for (int index = 0; index <= 100; index++)
+}
+
+// calibrate compass and speed if nessecary
+void calibrate()
+{
+  // Set path compass
+  for (int index = 0; index <= 100; index++)
     {
       int moreData = readIMUDMP();
       if (moreData >= 0) //function returns -1 if no data was read.
@@ -434,8 +462,8 @@ void calcPos()
       }
     }
     pathcompass = avgcomp;
-    driveline = true;
-  }
+
+    calibrated = true;
 }
 
 // Pathing Functions
@@ -567,6 +595,7 @@ void autoturnLeft()
     LR = 1;
     pos_y = 0;
     turns += 1;
+    pathcompass = -pathcompass;
   }
 }
 
@@ -594,6 +623,7 @@ void autoturnRight()
     LR = 0;
     pos_y = 0;
     turns += 1;
+    pathcompass = -pathcompass;
   }
 }
 
