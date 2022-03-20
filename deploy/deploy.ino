@@ -15,11 +15,16 @@ int IN2 = 7;       //PIN -- Motor direction output (right)
 int IN1 = 8;       //PIN -- Motor direction output (left)
 int RC_R = 10;     //PIN -- RC input   (right)
 int RC_L = 3;      //PIN -- RC input   (left)
+int pilotbutton = 52; // Pin to give the greenlight for autopath
+int emergencystop = 53; // Emergency shutoff pin
+int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
+int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
+int ultraStrig = 26, ultraSecho = 27; // scoop ultrasound pins
 
 // Drive Motor PWMs
 int PWM_R;         //SIGNAL RIGHT
 int PWM_L;         //SIGNAL LEFT
-int PWMMIN = 55, PWMMAX = 255; // min and max PWM values
+int PWMMIN = 55, PWMMAX = 100; // min and max PWM values
 int pwrstep = 1; // how large a change of pwr per step
 
 // Accelerometer Variables
@@ -36,10 +41,11 @@ float avgcomp = 0; // averagecompass value
 
 // Pathing Variables
 bool greenlight = false; // is bot in autonomous mode?
-double speed_x = 0, speed_y = 0; // x and y speed
+double speed_y = 0; // y speed
 int speedmax = 4; // speed limiter
-double pos_x = 0, pos_y = 0; // x and y position variables
-int bound_x = 40, bound_y = 40; // x and y dimensions of the area to be cleared
+double pos_y = 0; // y position variables
+int bound_y = 40; // length of the area to be cleared
+int turns = 0, maxturns = 10; // how many columns to clear
 int LR = 1; // will bot turn left or right next? 0 = left, 1 = right
 float pathcompass = 0; // path compass value
 int compassconstraint = 2; // min and max deviation of compass for autodriveForward
@@ -47,12 +53,24 @@ bool driveline = false; // are we driving forward?
 bool turning = false; // are we turning?
 bool turnComplete = false; // is the turn complete?
 
+// Scoop Variables
+bool scoopdeployed = false;
+
+
 void setup() {
   // Setup Pins
   pinMode(RC_R, INPUT);
   pinMode(RC_L, INPUT);
+  pinMode(pilotbutton, INPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN1, OUTPUT);
+  pinMode(ultraLtrig, OUTPUT);// left ultrasound pins
+  pinMode(ultraLecho, INPUT);
+  pinMode(ultraRtrig, OUTPUT);// right ultrasound pins
+  pinMode(ultraRecho, INPUT);
+  pinMode(ultraStrig, OUTPUT);// scoop ultrasound pins
+  pinMode(ultraSecho, INPUT);
+  attachInterrupt(digitalPinToInterrupt(emergencystop), panic, HIGH); // emergency stop interrupt
   // Setup Serial and I2C
   SERIAL_PORT.begin(115200);
   WIRE_PORT.begin();
@@ -122,10 +140,9 @@ void setup() {
   findGravity();
 
   // Reset pathing vars
-  pos_x = 0;
   pos_y = 0;
-  speed_x = 0;
   speed_y = 0;
+  turns = 0;
   LR = 1;
   pathcompass = 0;
   driveline = false;
@@ -134,6 +151,10 @@ void setup() {
 }
 
 void loop() {
+  // RC input to toggle greenlight via pilotbutton
+  // placeholder
+  delay(1);
+  
   // When not in autonomous mode
   if (greenlight = false)
   {
@@ -181,10 +202,19 @@ void loop() {
   {
     calcAccel();
     calcPos();
+    ultraSound();
+    adjustScoop();
     autoPath();
   }
 }
 
+// Emergency Stop ISR. Returns to manual control
+void panic()
+{
+  greenlight = false;
+}
+
+// IMU Funtions
 void calcAccel()
 {
   int moreData = readIMUDMP(); // Read data from accelerometer
@@ -408,6 +438,7 @@ void calcPos()
   }
 }
 
+// Pathing Functions
 void autoPath()
 {
   // Path code
@@ -417,11 +448,11 @@ void autoPath()
     return;
   }
 
-  // While within y bound, keep pathing
-  if (pos_y < bound_y)
+  // Keep going until max turns reached
+  if (turns < maxturns)
   {
-    // while within x bound, drive forward
-    if (pos_x < bound_x)
+    // while within y bound, drive forward
+    if (pos_y < bound_y)
     {
       autodriveForward(); // drive forward
       turning = false;
@@ -431,6 +462,7 @@ void autoPath()
       if (turning == false)
       {
         allStop(); // stop driving
+        depositScoop(); // collect from scoop
         turning = true;
         driveline = false;
       }
@@ -462,7 +494,7 @@ void autoPath()
 void autodriveForward()
 {
   // If speed under max, increase power, constrain to PWM
-  if (speed_x < speedmax)
+  if (speed_y < speedmax)
   {
     PWM_L += pwrstep;
     PWM_R += pwrstep;
@@ -472,7 +504,7 @@ void autodriveForward()
   }
 
   // If drifting right, correct left
-  if ((pathcompass - avgcomp) < compassconstraint)
+  if (abs(pathcompass - avgcomp) > compassconstraint)
   {
     PWM_L -= 2 * pwrstep;
     PWM_R += 2 * pwrstep;
@@ -482,7 +514,7 @@ void autodriveForward()
   }
 
   // If drifting left, correct right
-  if ((avgcomp - pathcompass) < compassconstraint)
+  if (abs(avgcomp - pathcompass) > compassconstraint)
   {
     PWM_L += 2 * pwrstep;
     PWM_R -= 2 * pwrstep;
@@ -513,7 +545,7 @@ void allStop()
 
 void autoturnLeft()
 {
-  if ((avgcomp - pathcompass) > compassconstraint)
+  if ((avgcomp / pathcompass) > -0.98 || (avgcomp / pathcompass) < -1.02)
   {
 
     PWM_R += pwrstep;
@@ -529,16 +561,18 @@ void autoturnLeft()
   if (turnComplete == true)
   {
     allStop();
+    deployScoop();
     turning = false;
     turnComplete = false;
     LR = 1;
-    pos_x = 0;
+    pos_y = 0;
+    turns += 1;
   }
 }
 
 void autoturnRight()
 {
-  if ((avgcomp - pathcompass) > compassconstraint)
+  if ((avgcomp / pathcompass) > -0.98 || (avgcomp / pathcompass) < -1.02)
   {
 
     PWM_L += pwrstep;
@@ -554,9 +588,38 @@ void autoturnRight()
   if (turnComplete == true)
   {
     allStop();
+    deployScoop();
     turning = false;
     turnComplete = false;
     LR = 0;
-    pos_x = 0;
+    pos_y = 0;
+    turns += 1;
   }
+}
+
+// Sensor functions
+void ultraSound()
+{
+  // If scoop deployed, driving, and object within 3 feet, disable greenlight
+  // placeholder for forward ultrasound sensor readings
+  delay(1);
+}
+
+// Scoop Functions
+void deployScoop()
+{
+  // placeholder for scoop deploy subroutine
+  delay(1);
+}
+
+void adjustScoop()
+{
+  // placeholder for scoop adjust subroutine
+  delay(1);
+}
+
+void depositScoop()
+{
+  // placeholder for deposit subroutine
+  delay(1);
 }
