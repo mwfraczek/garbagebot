@@ -13,9 +13,9 @@ int AN2 = 5;       //PIN -- PWM output (right)
 int AN1 = 6;       //PIN -- PWM output (left)
 int IN2 = 7;       //PIN -- Motor direction output (right)
 int IN1 = 8;       //PIN -- Motor direction output (left)
-int RC_R = 10;     //PIN -- RC input   (right)
-int RC_L = 3;      //PIN -- RC input   (left)
-int pilotbutton = 52; // Pin to give the greenlight for autopath
+int RC_R = 10;     //PIN -- RC input   (right), Channel 2
+int RC_L = 3;      //PIN -- RC input   (left), Channel 3
+int pilotbutton = 52; // Pin to give the greenlight for autopath, Channel 9
 int emergencystop = 53; // Emergency shutoff pin
 int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
 int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
@@ -182,7 +182,7 @@ void loop() {
     PWM_R = pulseIn(RC_R, HIGH);
 
     // LEFT joystick control //
-    if (PWM_L >= 1430 && PWM_L <= 1540) // LEFT joystick is centered (neither fwd/reverse)
+    if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
     {
       analogWrite(AN1, 0);
     }
@@ -192,7 +192,7 @@ void loop() {
       PWM_L = map(PWM_L, 1539, 1915, 55, 255);
       analogWrite(AN1, PWM_L);
     }
-    else if (PWM_L < 1430) //LEFT joystick is forward, map PWM values, send signal
+    else if (PWM_L < 1430 && PWM_L !=0) //LEFT joystick is forward, map PWM values, send signal
     {
       analogWrite(IN1, -1);
       PWM_L = map(PWM_L, 1431, 1080, 55, 255);
@@ -200,7 +200,7 @@ void loop() {
     }
 
     // RIGHT joystick control //
-    if (PWM_R >= 1430 && PWM_R <= 1540) // RIGHT joystick is centered (neither fwd/reverse)
+    if ((PWM_R >= 1430 && PWM_R <= 1540) || PWM_R == 0) // RIGHT joystick is centered (neither fwd/reverse)
     {
       analogWrite(AN2, 0);
     }
@@ -210,7 +210,7 @@ void loop() {
       PWM_R = map(PWM_R, 1539, 1915, 55, 255);
       analogWrite(AN2, PWM_R);
     }
-    else if (PWM_R < 1430) //RIGHT joystick is forward,  map PWM values, send signal
+    else if (PWM_R < 1430 && PWM_R != 0) //RIGHT joystick is forward,  map PWM values, send signal
     {
       analogWrite(IN2, -1);
       PWM_R = map(PWM_R, 1431, 1080, 55, 255);
@@ -526,6 +526,16 @@ void autodriveForward()
   {
     PWM_L += pwrstep;
     PWM_R += pwrstep;
+
+    PWM_L = constrain(PWM_L, PWMMIN, PWMMAX);
+    PWM_R = constrain(PWM_R, PWMMIN, PWMMAX);
+  }
+
+  // If speed over max, decrease power, constrain to PWM
+  if (speed_y > speedmax)
+  {
+    PWM_L -= pwrstep;
+    PWM_R -= pwrstep;
 
     PWM_L = constrain(PWM_L, PWMMIN, PWMMAX);
     PWM_R = constrain(PWM_R, PWMMIN, PWMMAX);
