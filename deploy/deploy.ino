@@ -22,9 +22,9 @@ int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
 int ultraStrig = 26, ultraSecho = 27; // scoop ultrasound pins
 
 // Drive Motor PWMs
-int PWM_R;         //SIGNAL RIGHT
-int PWM_L;         //SIGNAL LEFT
-int PWMMIN = 55, PWMMAX = 100; // min and max PWM values
+int PWM_R = 0;         //SIGNAL RIGHT
+int PWM_L = 0;         //SIGNAL LEFT
+int PWMMIN = 0, PWMMAX = 150; // min and max PWM values
 int pwrstep = 1; // how large a change of pwr per step
 
 // Compass Variables
@@ -150,17 +150,19 @@ void setup() {
 void loop() {
   // RC input to toggle greenlight via pilotbutton
   pilotsignal = pulseIn(pilotbutton, HIGH);
-  if (pilotsignal > 1900 || pilotsignal == 0 || panicking == true)
-  {
-    greenlight = false;
-  }
+  // Print automation state to serial
+  SERIAL_PORT.println(pilotsignal);
   if (pilotsignal < 1900 && pilotsignal != 0 && panicking == false)
   {
     greenlight = true;
   }
+  if (pilotsignal > 1900 || pilotsignal == 0 || panicking == true)
+  {
+    greenlight = false;
+  }
 
   // When not in autonomous mode
-  if (greenlight = false)
+  if (greenlight == false)
   {
     PWM_L = pulseIn(RC_L, HIGH); //take RC input signals
     PWM_R = pulseIn(RC_R, HIGH);
@@ -202,9 +204,9 @@ void loop() {
     }
   }
   // When in autonomous mode
-  if (greenlight = true)
+  if (greenlight == true)
   {
-    if (calibrated = false)
+    if (calibrated == false)
     {
       calibrate();
     }
@@ -411,12 +413,14 @@ void allStop()
     analogWrite(AN1, PWM_L);
     analogWrite(IN2, -1);
     analogWrite(AN2, PWM_R);
+
+    delay(10);
   }
 }
 
 void autoturnLeft()
 {
-  if ((avgcomp / pathcompass) > -0.98 || (avgcomp / pathcompass) < -1.02)
+  if ((avgcomp / pathcompass) > -0.99 || (avgcomp / pathcompass) < -1.01)
   {
 
     PWM_R += pwrstep;
@@ -443,7 +447,7 @@ void autoturnLeft()
 
 void autoturnRight()
 {
-  if ((avgcomp / pathcompass) > -0.98 || (avgcomp / pathcompass) < -1.02)
+  if ((avgcomp / pathcompass) > -0.99 || (avgcomp / pathcompass) < -1.01)
   {
 
     PWM_L += pwrstep;
