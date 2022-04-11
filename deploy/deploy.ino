@@ -15,7 +15,8 @@ int IN2 = 7;       //PIN -- Motor direction output (right)
 int IN1 = 8;       //PIN -- Motor direction output (left)
 int RC_R = 10;     //PIN -- RC input   (right), Channel 2
 int RC_L = 3;      //PIN -- RC input   (left), Channel 3
-int pilotbutton = 52; // Pin to give the greenlight for autopath, Channel 9
+int manualscoopswitch = 50; // Pin for manual scoop switch input, Switch F, Channel 5
+int pilotbutton = 52; // Pin to give the greenlight for autopath, Switch B, Channel 9
 int emergencystop = 53; // Emergency shutoff pin
 int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
 int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
@@ -48,14 +49,20 @@ bool turnComplete = false; // is the turn complete?
 bool calibrated = false; // are we calibrated?
 
 // Ultrasound Variables
-float ultraDistanceL = 0; // left ultrasound, raw distance
-float ultraAvgL = 0; // left ultrasound, averaged for noise
-float ultraDistanceR = 0; // right ultrasound, raw distance
-float ultraAvgR = 0; // right ultrasound, averaged for noise
+int ultraDistanceL = 0; // left ultrasound, raw distance
+int ultraAvgL = 0; // left ultrasound, averaged for noise
+int ultraDistanceR = 0; // right ultrasound, raw distance
+int ultraAvgR = 0; // right ultrasound, averaged for noise
+int ultraDistanceS = 0; // scoop ultrasound, raw distance
+long duration = 0; // used for calculating distance
 int ultraObstacle = 100; // check for obstacles within this distance
 
 // Scoop Variables
+bool scoopmode = false; // False for manual mode, True for automatic mode
 bool scoopdeployed = false;
+bool scoopdigging = false;
+bool scoopraised = false;
+int manualscoopsignal = 0; // Less than 1900 for lowered, greater than 1900 for raised
 float scoopheight = 0;
 
 
@@ -64,6 +71,7 @@ void setup() {
   pinMode(RC_R, INPUT);
   pinMode(RC_L, INPUT);
   pinMode(pilotbutton, INPUT);
+  pinMode(manualscoopswitch, INPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(ultraLtrig, OUTPUT);// left ultrasound pins
@@ -166,6 +174,7 @@ void loop() {
   {
     PWM_L = pulseIn(RC_L, HIGH); //take RC input signals
     PWM_R = pulseIn(RC_R, HIGH);
+    scoopmode = false;
 
     // LEFT joystick control //
     if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
@@ -202,7 +211,9 @@ void loop() {
       PWM_R = map(PWM_R, 1431, 1080, 55, 255);
       analogWrite(AN2, PWM_R);
     }
+    adjustScoop();
   }
+  
   // When in autonomous mode
   if (greenlight == true)
   {
@@ -476,8 +487,33 @@ void autoturnRight()
 void ultraSound()
 {
   // If scoop deployed, driving, and object within 3 feet, disable greenlight
-  // placeholder for forward ultrasound sensor readings
-  delay(1);
+  // Ultrasound Recording
+  // Trigger the left ultrasound pulse
+  digitalWrite(ultraLtrig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultraLtrig, HIGH);
+  delayMicroseconds(10);
+  // Capture the return
+  duration = pulseIn(ultraLecho, HIGH);
+  ultraDistanceL = duration * 0.034 / 2;
+
+  // Trigger the right ultrasound pulse
+  digitalWrite(ultraRtrig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultraRtrig, HIGH);
+  delayMicroseconds(10);
+  // Capture the return
+  duration = pulseIn(ultraRecho, HIGH);
+  ultraDistanceR = duration * 0.034 / 2;
+
+  // Trigger the scoop ultrasound pulse
+  digitalWrite(ultraStrig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ultraStrig, HIGH);
+  delayMicroseconds(10);
+  // Capture the return
+  duration = pulseIn(ultraSecho, HIGH);
+  ultraDistanceS = duration * 0.034 / 2;
 }
 
 // Scoop Functions
