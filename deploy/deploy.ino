@@ -17,10 +17,14 @@ int RC_R = 10;     //PIN -- RC input   (right), Channel 2
 int RC_L = 3;      //PIN -- RC input   (left), Channel 3
 int manualscoopswitch = 50; // Pin for manual scoop switch input, Switch F, Channel 5
 int pilotbutton = 52; // Pin to give the greenlight for autopath, Switch B, Channel 9
-int emergencystop = 53; // Emergency shutoff pin
+int emergencystop = 2; // Emergency shutoff pin
 int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
 int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
 int ultraStrig = 26, ultraSecho = 27; // scoop ultrasound pins
+int biceppower = 14; // low to move
+int bicepreverse = 15; // high to extend, low to retract
+int forearmpower = 16;
+int forearmreverse = 17;
 
 // Drive Motor PWMs
 int PWM_R = 0;         //SIGNAL RIGHT
@@ -38,6 +42,7 @@ int pilotsignal = 2000; // variable for pilotsignal transmitter
 bool greenlight = false; // is bot in autonomous mode?
 bool panicking = false; // are we emergency stopped?
 unsigned long drivetime = 0; // Current drivetime
+unsigned long pauseddrivetime = 0; // time stopped for obstacles
 unsigned long maxdrivetime = 10000; // Maximum drivetime (milliseconds)
 int turns = 0, maxturns = 10; // how many columns to clear
 int LR = 1; // will bot turn left or right next? 0 = left, 1 = right
@@ -54,12 +59,14 @@ int ultraAvgL = 0; // left ultrasound, averaged for noise
 int ultraDistanceR = 0; // right ultrasound, raw distance
 int ultraAvgR = 0; // right ultrasound, averaged for noise
 int ultraDistanceS = 0; // scoop ultrasound, raw distance
+int ultraAvgS = 0; // right ultrasound, averaged for noise
 long duration = 0; // used for calculating distance
-int ultraObstacle = 100; // check for obstacles within this distance
+int ultraObstacle = 300; // check for obstacles within this distance
+double ultraema = 0.20; // Use exponential moving average.
+bool objectdetected = false;
 
 // Scoop Variables
 bool scoopmode = false; // False for manual mode, True for automatic mode
-bool scoopdeployed = false;
 bool scoopdigging = false;
 bool scoopraised = false;
 int manualscoopsignal = 0; // Less than 1900 for lowered, greater than 1900 for raised
@@ -80,7 +87,8 @@ void setup() {
   pinMode(ultraRecho, INPUT);
   pinMode(ultraStrig, OUTPUT);// scoop ultrasound pins
   pinMode(ultraSecho, INPUT);
-  attachInterrupt(digitalPinToInterrupt(emergencystop), panic, HIGH); // emergency stop interrupt
+  pinMode(emergencystop, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(emergencystop), panic, RISING); // emergency stop interrupt
   // Setup Serial and I2C
   SERIAL_PORT.begin(115200);
   WIRE_PORT.begin();
@@ -149,10 +157,13 @@ void setup() {
   turns = 0;
   LR = 1;
   pathcompass = 0;
+  maxdrivetime = 10000;
   driveline = false;
   turning = false;
   turnComplete = false;
   calibrated = false;
+  scoopmode = false;
+  objectdetected = false;
 }
 
 void loop() {
@@ -168,6 +179,9 @@ void loop() {
   {
     greenlight = false;
   }
+
+  // RC input for scoop
+  manualscoopsignal = pulseIn(manualscoopswitch, HIGH);
 
   // When not in autonomous mode
   if (greenlight == false)
@@ -213,10 +227,11 @@ void loop() {
     }
     adjustScoop();
   }
-  
+
   // When in autonomous mode
   if (greenlight == true)
   {
+    scoopmode = true;
     if (calibrated == false)
     {
       calibrate();
@@ -224,7 +239,6 @@ void loop() {
     calcIMU();
     calcPos();
     ultraSound();
-    adjustScoop();
     autoPath();
   }
 }
@@ -289,12 +303,24 @@ void calcPos()
   // Calculate drivetime
   if (driveline == false && turning == false)
   {
+    digScoop();
     drivetime = millis();
+    maxdrivetime = 10000;
     driveline = true;
   }
 
+  // Calculated paused drivetime
+  if (objectdetected == false)
+  {
+    pauseddrivetime = millis();
+  }
+  else
+  {
+    maxdrivetime += millis() - pauseddrivetime;
+  }
+
   // If over drivetime, set driving to false
-  if (((millis() - drivetime) > maxdrivetime))
+  if ((millis() - drivetime) > maxdrivetime)
   {
     driveline = false;
   }
@@ -328,6 +354,12 @@ void autoPath()
     return;
   }
 
+  if (objectdetected == true)
+  {
+    allStop();
+    return;
+  }
+
   // Keep going until max turns reached
   if (turns < maxturns)
   {
@@ -342,6 +374,7 @@ void autoPath()
       if (turning == false)
       {
         allStop(); // stop driving
+        depositScoop();
         turning = true;
       }
     }
@@ -493,44 +526,159 @@ void ultraSound()
   delayMicroseconds(2);
   digitalWrite(ultraLtrig, HIGH);
   delayMicroseconds(10);
+  digitalWrite(ultraLtrig, LOW);
   // Capture the return
   duration = pulseIn(ultraLecho, HIGH);
-  ultraDistanceL = duration * 0.034 / 2;
+  if (duration * 0.034 / 2 < 500)
+  {
+    ultraDistanceL = duration * 0.034 / 2;
+  }
+  else
+  {
+    ultraDistanceL = 500;
+  }
 
   // Trigger the right ultrasound pulse
   digitalWrite(ultraRtrig, LOW);
   delayMicroseconds(2);
   digitalWrite(ultraRtrig, HIGH);
   delayMicroseconds(10);
+  digitalWrite(ultraRtrig, LOW);
   // Capture the return
   duration = pulseIn(ultraRecho, HIGH);
-  ultraDistanceR = duration * 0.034 / 2;
+  if (duration * 0.034 / 2 < 500)
+  {
+    ultraDistanceR = duration * 0.034 / 2;
+  }
+  else
+  {
+    ultraDistanceR = 500;
+  }
 
   // Trigger the scoop ultrasound pulse
   digitalWrite(ultraStrig, LOW);
   delayMicroseconds(2);
   digitalWrite(ultraStrig, HIGH);
   delayMicroseconds(10);
+  digitalWrite(ultraStrig, LOW);
   // Capture the return
   duration = pulseIn(ultraSecho, HIGH);
-  ultraDistanceS = duration * 0.034 / 2;
+  if (duration * 0.034 / 2 < 500)
+  {
+    ultraDistanceS = duration * 0.034 / 2;
+  }
+  else
+  {
+    ultraDistanceL = 500;
+  }
+
+  // Calculate Ultrasound avgs
+  ultraAvgL = ultraAvgL * (1 - ultraema) + ultraDistanceL * ultraema;
+  ultraAvgR = ultraAvgR * (1 - ultraema) + ultraDistanceR * ultraema;
+  ultraAvgS = ultraAvgS * (1 - ultraema) + ultraDistanceS * ultraema;
+
+  // Detect if an object is within the specified distance and stop
+  if (ultraAvgL < ultraObstacle || ultraAvgR < ultraObstacle)
+  {
+    objectdetected = true;
+  }
+  else
+  {
+    objectdetected = false;
+  }
 }
 
 // Scoop Functions
 void adjustScoop()
 {
-  // placeholder for scoop adjust subroutine
-  delay(1);
+  // Manual scoop control
+  if (scoopmode == false)
+  {
+    if (manualscoopsignal < 1900)
+    {
+      resetScoop();
+    }
+    else
+    {
+      depositScoop();
+    }
+  }
 }
 
-void deployScoop()
+// start digging
+void digScoop()
 {
-  // placeholder for scoop deploy subroutine
+  // if already digging, return
+  if(scoopdigging == true && scoopraised == false)
+  {
+    return;
+  }
+
+  // if raised, reset then dig
+  if (scoopdigging == false && scoopraised == true)
+  {
+    resetScoop();
+  }
+
+  // placeholder for scoop deploy code
   delay(1);
+
+  scoopdigging = true;
 }
 
+// deposit into bin
 void depositScoop()
 {
-  // placeholder for deposit subroutine
+  // if already depositing, return
+  if(scoopdigging == false && scoopraised == true)
+  {
+    return;
+  }
+
+  // if currently digging, reset scoop first
+  if(scoopdigging == true && scoopraised == false)
+  {
+    resetScoop();
+  }
+
+  // placeholder for scoop deposit code
   delay(1);
+
+  scoopraised = true;
+
+  // if in automatic mode, reset after depositing
+  if (scoopmode == true)
+  {
+    resetScoop();
+  }
+}
+
+// reset to neutral position
+void resetScoop()
+{
+  // if already reset, return
+  if (scoopdigging == false && scoopraised == false)
+  {
+    return;
+  }
+
+  // if raised, lower to reset
+  if (scoopdigging == false && scoopraised == true)
+  {
+    // placeholder for this code section
+    delay(1);
+
+    scoopraised = false;
+    return;
+  }
+
+  // if digging, return to neutral
+  if (scoopdigging == true && scoopraised == false)
+  {
+    // placeholder for this code section
+    delay(1);
+
+    scoopdigging = false;
+    return;
+  }
 }
