@@ -21,8 +21,8 @@ int emergencystop = 2; // Emergency shutoff pin
 int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
 int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
 int ultraStrig = 26, ultraSecho = 27; // scoop ultrasound pins
-int leftbicep = 14; // low to move, high to stop
-int rightbicep = 15;
+int rightbicep = 14; // low to move, high to stop
+int leftbicep = 15;
 int leftforearm = 16;
 int rightforearm = 17;
 int armdirection = 18; // low retracts, high extends
