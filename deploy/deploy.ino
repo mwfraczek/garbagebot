@@ -21,11 +21,12 @@ int emergencystop = 2; // Emergency shutoff pin
 int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
 int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
 int ultraStrig = 26, ultraSecho = 27; // scoop ultrasound pins
-int rightbicep = 14; // low to move, high to stop
-int leftbicep = 15;
-int leftforearm = 16;
-int rightforearm = 17;
+int rightbicep = 14; // low to move, high to stop, motor 1
+int leftbicep = 15; // motor 2
+int leftforearm = 16; // motor 3
+int rightforearm = 17; // motor 4
 int armdirection = 18; // low retracts, high extends
+unsigned long armtime = 0;
 
 // Drive Motor PWMs
 int PWM_R = 0;         //SIGNAL RIGHT
@@ -88,6 +89,11 @@ void setup() {
   pinMode(ultraRecho, INPUT);
   pinMode(ultraStrig, OUTPUT);// scoop ultrasound pins
   pinMode(ultraSecho, INPUT);
+  pinMode(leftbicep, OUTPUT);
+  pinMode(rightbicep, OUTPUT);
+  pinMode(leftforearm, OUTPUT);
+  pinMode(rightforearm, OUTPUT);
+  pinMode(armdirection, OUTPUT);
   pinMode(emergencystop, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(emergencystop), panic, RISING); // emergency stop interrupt
   // Setup Serial and I2C
@@ -168,28 +174,103 @@ void setup() {
 }
 
 void loop() {
+  // Debug, print current value of emergency stop pin
+  //SERIAL_PORT.print(F("Emergency Pin is: "));
+  //SERIAL_PORT.println(digitalRead(emergencystop));
+
   // RC input to toggle greenlight via pilotbutton
   pilotsignal = pulseIn(pilotbutton, HIGH);
-  // Print automation state to serial
-  SERIAL_PORT.println(pilotsignal);
+  // Debug, Print automation state to serial, 0 is manual, 1 is automatic
+  //SERIAL_PORT.print(F("Automation state: "));
+  //SERIAL_PORT.println(pilotsignal);
   if (pilotsignal < 1900 && pilotsignal != 0 && panicking == false)
   {
     greenlight = true;
   }
-  if (pilotsignal > 1900 || pilotsignal == 0 || panicking == true)
+  if (pilotsignal > 1900 || pilotsignal == 0)
   {
     greenlight = false;
+  }
+  if (panicking == true)
+  {
+    return;
   }
 
   // RC input for scoop
   manualscoopsignal = pulseIn(manualscoopswitch, HIGH);
+  // debug, pring manual scoop signal
+  Serial.print(F("Manual Scoop Signal: "));
+  Serial.println(manualscoopsignal);
+  if (manualscoopsignal < 1900)
+  {
+    scoopmode = false;
+  }
+  if (manualscoopsignal > 1900)
+  {
+    scoopmode = true;
+  }
 
   // When not in autonomous mode
   if (greenlight == false)
   {
     PWM_L = pulseIn(RC_L, HIGH); //take RC input signals
     PWM_R = pulseIn(RC_R, HIGH);
-    scoopmode = false;
+
+    // Debug, print the PWM vals
+    Serial.print(F("Left PWM Signal: "));
+    Serial.println(PWM_L);
+    Serial.print(F("Right PWM Signal: "));
+    Serial.println(PWM_R);
+
+    if (scoopmode == true)
+    {
+      // LEFT joystick control //
+      if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
+      {
+        Serial.println("Bicep Null");
+        digitalWrite(armdirection, HIGH);
+        digitalWrite(leftbicep, HIGH);
+        digitalWrite(rightbicep, HIGH);
+      }
+      else if (PWM_L > 1540) //LEFT joystick is in reverse, map PWM values, send signal
+      {
+        Serial.println("Bicep Retract");
+        digitalWrite(armdirection, LOW);
+        digitalWrite(leftbicep, LOW);
+        digitalWrite(rightbicep, LOW);
+      }
+      else if (PWM_L < 1430 && PWM_L != 0) //LEFT joystick is forward, map PWM values, send signal
+      {
+        Serial.println("Bicep Extend");
+        digitalWrite(armdirection, HIGH);
+        digitalWrite(leftbicep, LOW);
+        digitalWrite(rightbicep, LOW);
+      }
+
+      // RIGHT joystick control //
+      if ((PWM_R >= 1430 && PWM_R <= 1540) || PWM_R == 0) // RIGHT joystick is centered (neither fwd/reverse)
+      {
+        Serial.println("Forearm Null");
+        digitalWrite(armdirection, HIGH);
+        digitalWrite(leftforearm, HIGH);
+        digitalWrite(rightforearm, HIGH);
+      }
+      else if (PWM_R > 1540) //RIGHT joystick is in reverse, map PWM values, send signal
+      {
+        Serial.println("Forearm Retract");
+        digitalWrite(armdirection, LOW);
+        digitalWrite(leftforearm, LOW);
+        digitalWrite(rightforearm, LOW);
+      }
+      else if (PWM_R < 1430 && PWM_R != 0) //RIGHT joystick is forward,  map PWM values, send signal
+      {
+        Serial.println("Forearm Extend");
+        digitalWrite(armdirection, HIGH);
+        digitalWrite(leftforearm, LOW);
+        digitalWrite(rightforearm, LOW);
+      }
+      return;
+    }
 
     // LEFT joystick control //
     if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
@@ -226,7 +307,6 @@ void loop() {
       PWM_R = map(PWM_R, 1431, 1080, 55, 255);
       analogWrite(AN2, PWM_R);
     }
-    adjustScoop();
   }
 
   // When in autonomous mode
@@ -247,6 +327,7 @@ void loop() {
 // Emergency Stop ISR. Returns to manual control
 void panic()
 {
+  allStop();
   greenlight = false;
   panicking = true;
 }
@@ -610,7 +691,7 @@ void adjustScoop()
 void digScoop()
 {
   // if already digging, return
-  if(scoopdigging == true && scoopraised == false)
+  if (scoopdigging == true && scoopraised == false)
   {
     return;
   }
@@ -631,13 +712,13 @@ void digScoop()
 void depositScoop()
 {
   // if already depositing, return
-  if(scoopdigging == false && scoopraised == true)
+  if (scoopdigging == false && scoopraised == true)
   {
     return;
   }
 
   // if currently digging, reset scoop first
-  if(scoopdigging == true && scoopraised == false)
+  if (scoopdigging == true && scoopraised == false)
   {
     resetScoop();
   }
@@ -666,6 +747,7 @@ void resetScoop()
   // if raised, lower to reset
   if (scoopdigging == false && scoopraised == true)
   {
+    // 55 seconds for forearm, 35 seconds for bicep
     // placeholder for this code section
     delay(1);
 
