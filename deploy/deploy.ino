@@ -21,11 +21,11 @@ int emergencystop = 2; // Emergency shutoff pin
 int ultraLtrig = 22, ultraLecho = 23; // left ultrasound pins
 int ultraRtrig = 24, ultraRecho = 25; // right ultrasound pins
 int ultraStrig = 26, ultraSecho = 27; // scoop ultrasound pins
-int rightbicep = 14; // low to move, high to stop, motor 1
-int leftbicep = 15; // motor 2
-int leftforearm = 16; // motor 3
-int rightforearm = 17; // motor 4
-int armdirection = 18; // low retracts, high extends
+int rightbicep = 30; // low to move, high to stop, motor 1
+int leftbicep = 31; // motor 2
+int leftforearm = 32; // motor 3
+int rightforearm = 33; // motor 4
+int armdirection = 34; // low retracts, high extends
 unsigned long armtime = 0;
 
 // Drive Motor PWMs
@@ -100,6 +100,12 @@ void setup() {
   SERIAL_PORT.begin(115200);
   WIRE_PORT.begin();
   WIRE_PORT.setClock(400000);
+
+  digitalWrite(leftbicep, HIGH);
+  digitalWrite(rightbicep, HIGH);
+  digitalWrite(leftforearm, HIGH);
+  digitalWrite(rightforearm, HIGH);
+  digitalWrite(armdirection, HIGH);
 
   // Disable autonomous mode
   greenlight = false;
@@ -228,7 +234,7 @@ void loop() {
       if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
       {
         Serial.println("Bicep Null");
-        digitalWrite(armdirection, HIGH);
+        //digitalWrite(armdirection, HIGH);
         digitalWrite(leftbicep, HIGH);
         digitalWrite(rightbicep, HIGH);
       }
@@ -251,7 +257,7 @@ void loop() {
       if ((PWM_R >= 1430 && PWM_R <= 1540) || PWM_R == 0) // RIGHT joystick is centered (neither fwd/reverse)
       {
         Serial.println("Forearm Null");
-        digitalWrite(armdirection, HIGH);
+        //digitalWrite(armdirection, HIGH);
         digitalWrite(leftforearm, HIGH);
         digitalWrite(rightforearm, HIGH);
       }
@@ -269,43 +275,48 @@ void loop() {
         digitalWrite(leftforearm, LOW);
         digitalWrite(rightforearm, LOW);
       }
-      return;
+
+      delay(100);
     }
 
-    // LEFT joystick control //
-    if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
+    // Manual Drive Control
+    if (scoopmode == false)
     {
-      analogWrite(AN1, 0);
-    }
-    else if (PWM_L > 1540) //LEFT joystick is in reverse, map PWM values, send signal
-    {
-      analogWrite(IN1, 1);
-      PWM_L = map(PWM_L, 1539, 1915, 55, 255);
-      analogWrite(AN1, PWM_L);
-    }
-    else if (PWM_L < 1430 && PWM_L != 0) //LEFT joystick is forward, map PWM values, send signal
-    {
-      analogWrite(IN1, -1);
-      PWM_L = map(PWM_L, 1431, 1080, 55, 255);
-      analogWrite(AN1, PWM_L);
-    }
+      // LEFT joystick control //
+      if ((PWM_L >= 1430 && PWM_L <= 1540) || PWM_L == 0) // LEFT joystick is centered (neither fwd/reverse)
+      {
+        analogWrite(AN1, 0);
+      }
+      else if (PWM_L > 1540) //LEFT joystick is in reverse, map PWM values, send signal
+      {
+        analogWrite(IN1, 1);
+        PWM_L = map(PWM_L, 1539, 1915, 55, 255);
+        analogWrite(AN1, PWM_L);
+      }
+      else if (PWM_L < 1430 && PWM_L != 0) //LEFT joystick is forward, map PWM values, send signal
+      {
+        analogWrite(IN1, -1);
+        PWM_L = map(PWM_L, 1431, 1080, 55, 255);
+        analogWrite(AN1, PWM_L);
+      }
 
-    // RIGHT joystick control //
-    if ((PWM_R >= 1430 && PWM_R <= 1540) || PWM_R == 0) // RIGHT joystick is centered (neither fwd/reverse)
-    {
-      analogWrite(AN2, 0);
-    }
-    else if (PWM_R > 1540) //RIGHT joystick is in reverse, map PWM values, send signal
-    {
-      analogWrite(IN2, 1);
-      PWM_R = map(PWM_R, 1539, 1915, 55, 255);
-      analogWrite(AN2, PWM_R);
-    }
-    else if (PWM_R < 1430 && PWM_R != 0) //RIGHT joystick is forward,  map PWM values, send signal
-    {
-      analogWrite(IN2, -1);
-      PWM_R = map(PWM_R, 1431, 1080, 55, 255);
-      analogWrite(AN2, PWM_R);
+      // RIGHT joystick control //
+      if ((PWM_R >= 1430 && PWM_R <= 1540) || PWM_R == 0) // RIGHT joystick is centered (neither fwd/reverse)
+      {
+        analogWrite(AN2, 0);
+      }
+      else if (PWM_R > 1540) //RIGHT joystick is in reverse, map PWM values, send signal
+      {
+        analogWrite(IN2, 1);
+        PWM_R = map(PWM_R, 1539, 1915, 55, 255);
+        analogWrite(AN2, PWM_R);
+      }
+      else if (PWM_R < 1430 && PWM_R != 0) //RIGHT joystick is forward,  map PWM values, send signal
+      {
+        analogWrite(IN2, -1);
+        PWM_R = map(PWM_R, 1431, 1080, 55, 255);
+        analogWrite(AN2, PWM_R);
+      }
     }
   }
 
@@ -322,6 +333,8 @@ void loop() {
     ultraSound();
     autoPath();
   }
+
+
 }
 
 // Emergency Stop ISR. Returns to manual control
@@ -723,8 +736,30 @@ void depositScoop()
     resetScoop();
   }
 
-  // placeholder for scoop deposit code
-  delay(1);
+  armtime = millis();
+  while ((millis() - armtime) < 35000)
+  {
+    digitalWrite(armdirection, HIGH);
+    digitalWrite(leftforearm, HIGH);
+    digitalWrite(rightforearm, HIGH);
+    digitalWrite(leftbicep, HIGH);
+    digitalWrite(rightbicep, HIGH);
+    delay(100);
+  }
+
+  digitalWrite(leftbicep, LOW);
+  digitalWrite(rightbicep, LOW);
+
+  while ((millis() - armtime) < 20000)
+  {
+    digitalWrite(armdirection, HIGH);
+    digitalWrite(leftforearm, HIGH);
+    digitalWrite(rightforearm, HIGH);
+    delay(100);
+  }
+
+  digitalWrite(leftforearm, LOW);
+  digitalWrite(rightforearm, LOW);
 
   scoopraised = true;
 
@@ -748,8 +783,30 @@ void resetScoop()
   if (scoopdigging == false && scoopraised == true)
   {
     // 55 seconds for forearm, 35 seconds for bicep
-    // placeholder for this code section
-    delay(1);
+    armtime = millis();
+    while ((millis() - armtime) < 35000)
+    {
+      digitalWrite(armdirection, LOW);
+      digitalWrite(leftforearm, HIGH);
+      digitalWrite(rightforearm, HIGH);
+      digitalWrite(leftbicep, HIGH);
+      digitalWrite(rightbicep, HIGH);
+      delay(100);
+    }
+
+    digitalWrite(leftbicep, LOW);
+    digitalWrite(rightbicep, LOW);
+
+    while ((millis() - armtime) < 20000)
+    {
+      digitalWrite(armdirection, LOW);
+      digitalWrite(leftforearm, HIGH);
+      digitalWrite(rightforearm, HIGH);
+      delay(100);
+    }
+
+    digitalWrite(leftforearm, LOW);
+    digitalWrite(rightforearm, LOW);
 
     scoopraised = false;
     return;
